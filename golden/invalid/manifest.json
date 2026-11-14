@@ -1,0 +1,1382 @@
+{
+ "models": [
+  {
+   "file": "lda_b_string.json",
+   "reason": "a number written as a string",
+   "rule": "type"
+  },
+  {
+   "file": "lda_b_bool.json",
+   "reason": "a boolean where a number belongs",
+   "rule": "type"
+  },
+  {
+   "file": "lda_w_cell_string.json",
+   "reason": "a weight written as a string",
+   "rule": "type"
+  },
+  {
+   "file": "fs_string.json",
+   "reason": "fs written as a string",
+   "rule": "type"
+  },
+  {
+   "file": "low_hz_string.json",
+   "reason": "band edge written as a string",
+   "rule": "type"
+  },
+  {
+   "file": "window_start_string.json",
+   "reason": "window value written as a string",
+   "rule": "type"
+  },
+  {
+   "file": "csp_cell_string.json",
+   "reason": "a CSP weight written as a string (first band)",
+   "rule": "type"
+  },
+  {
+   "file": "csp_cell_string_last_band.json",
+   "reason": "a CSP weight written as a string (last band, last row)",
+   "rule": "type"
+  },
+  {
+   "file": "sos_cell_string.json",
+   "reason": "a filter coefficient written as a string",
+   "rule": "type"
+  },
+  {
+   "file": "schema_version_float.json",
+   "reason": "schema_version must be the integer 1",
+   "rule": "type"
+  },
+  {
+   "file": "schema_version_bool.json",
+   "reason": "schema_version must be the integer 1",
+   "rule": "type"
+  },
+  {
+   "file": "schema_version_2.json",
+   "reason": "unsupported schema_version",
+   "rule": "value"
+  },
+  {
+   "file": "labels_bool.json",
+   "reason": "label values must be integers",
+   "rule": "type"
+  },
+  {
+   "file": "labels_float.json",
+   "reason": "label values must be integers",
+   "rule": "type"
+  },
+  {
+   "file": "labels_swapped.json",
+   "reason": "LEFT is 1, RIGHT is 2",
+   "rule": "value"
+  },
+  {
+   "file": "window_is_list.json",
+   "reason": "window must be an object",
+   "rule": "type"
+  },
+  {
+   "file": "lda_is_list.json",
+   "reason": "lda must be an object",
+   "rule": "type"
+  },
+  {
+   "file": "band_is_list.json",
+   "reason": "each band must be an object",
+   "rule": "type"
+  },
+  {
+   "file": "bands_is_object.json",
+   "reason": "bands must be a list",
+   "rule": "type"
+  },
+  {
+   "file": "channels_is_string.json",
+   "reason": "channels must be a list",
+   "rule": "type"
+  },
+  {
+   "file": "channels_seven.json",
+   "reason": "exactly 8 channels",
+   "rule": "value"
+  },
+  {
+   "file": "channels_reversed.json",
+   "reason": "channel order is fixed",
+   "rule": "value"
+  },
+  {
+   "file": "channels_duplicated.json",
+   "reason": "channel names must be the fixed list",
+   "rule": "value"
+  },
+  {
+   "file": "unknown_key.json",
+   "reason": "unknown top-level key",
+   "rule": "keys"
+  },
+  {
+   "file": "unknown_key_in_window.json",
+   "reason": "unknown key inside window",
+   "rule": "keys"
+  },
+  {
+   "file": "unknown_key_in_band.json",
+   "reason": "unknown key inside a band",
+   "rule": "keys"
+  },
+  {
+   "file": "unknown_key_in_labels.json",
+   "reason": "unknown key inside labels",
+   "rule": "keys"
+  },
+  {
+   "file": "missing_lda.json",
+   "reason": "missing top-level key",
+   "rule": "keys"
+  },
+  {
+   "file": "missing_schema_version.json",
+   "reason": "missing top-level key",
+   "rule": "keys"
+  },
+  {
+   "file": "missing_lda_b.json",
+   "reason": "missing key inside lda",
+   "rule": "keys"
+  },
+  {
+   "file": "fs_negative.json",
+   "reason": "fs must be > 0 (this also puts every band above fs/2)",
+   "rule": "value"
+  },
+  {
+   "file": "offset_mean.json",
+   "reason": "offset must be first_sample",
+   "rule": "value"
+  },
+  {
+   "file": "bands_empty.json",
+   "reason": "at least one band (lda.w emptied too, so only this rule breaks)",
+   "rule": "shape"
+  },
+  {
+   "file": "band_low_zero.json",
+   "reason": "low_hz must be > 0",
+   "rule": "value"
+  },
+  {
+   "file": "band_low_above_high.json",
+   "reason": "low_hz must be < high_hz",
+   "rule": "value"
+  },
+  {
+   "file": "band_high_at_nyquist.json",
+   "reason": "high_hz must be below fs/2, not equal",
+   "rule": "value"
+  },
+  {
+   "file": "band_above_nyquist.json",
+   "reason": "high_hz must be below fs/2",
+   "rule": "value"
+  },
+  {
+   "file": "sos_wrong_width.json",
+   "reason": "filter sections need 6 numbers",
+   "rule": "shape"
+  },
+  {
+   "file": "sos_empty.json",
+   "reason": "a band needs at least one filter section",
+   "rule": "shape"
+  },
+  {
+   "file": "sos_a0_not_one.json",
+   "reason": "a0 must equal 1 (first band, first section)",
+   "rule": "value"
+  },
+  {
+   "file": "sos_a0_not_one_last_band.json",
+   "reason": "a0 must equal 1 (last band, last section)",
+   "rule": "value"
+  },
+  {
+   "file": "csp_wrong_width.json",
+   "reason": "CSP rows need 8 columns (every band)",
+   "rule": "shape"
+  },
+  {
+   "file": "csp_rows_differ.json",
+   "reason": "every band needs the same CSP row count",
+   "rule": "shape"
+  },
+  {
+   "file": "csp_odd_rows.json",
+   "reason": "CSP row count must be even",
+   "rule": "shape"
+  },
+  {
+   "file": "lda_w_too_short.json",
+   "reason": "lda.w has 3 numbers, needs bands x 2p",
+   "rule": "shape"
+  },
+  {
+   "file": "window_negative_start.json",
+   "reason": "window.start_s must be >= 0",
+   "rule": "value"
+  },
+  {
+   "file": "window_len_zero.json",
+   "reason": "window.len_s must be > 0",
+   "rule": "value"
+  },
+  {
+   "file": "window_len_negative.json",
+   "reason": "window.len_s must be > 0",
+   "rule": "value"
+  },
+  {
+   "file": "window_too_short.json",
+   "reason": "window must span at least 2 samples (rounds to 0)",
+   "rule": "value"
+  },
+  {
+   "file": "window_one_sample.json",
+   "reason": "window must span at least 2 samples (rounds to 1)",
+   "rule": "value"
+  },
+  {
+   "file": "window_len_huge.json",
+   "reason": "window length above 2^20 samples",
+   "rule": "value"
+  },
+  {
+   "file": "window_start_huge.json",
+   "reason": "window start above 2^20 samples",
+   "rule": "value"
+  },
+  {
+   "file": "fs_huge.json",
+   "reason": "fs x len_s overflows to infinity",
+   "rule": "value"
+  },
+  {
+   "file": "channel_not_string.json",
+   "reason": "channel names must be strings",
+   "rule": "type"
+  },
+  {
+   "file": "lda_w_too_long.json",
+   "reason": "lda.w has one number too many",
+   "rule": "shape"
+  },
+  {
+   "file": "csp_empty_rows.json",
+   "reason": "a band needs CSP rows (lda.w emptied too, so only this rule breaks)",
+   "rule": "shape"
+  },
+  {
+   "file": "rail_abs_zero.json",
+   "reason": "rail_abs must be > 0",
+   "rule": "value"
+  },
+  {
+   "file": "rail_abs_negative.json",
+   "reason": "rail_abs must be > 0",
+   "rule": "value"
+  },
+  {
+   "file": "rail_abs_string.json",
+   "reason": "rail_abs written as a string",
+   "rule": "type"
+  },
+  {
+   "file": "rail_abs_null.json",
+   "reason": "null is not a number (leave the key out to turn the check off)",
+   "rule": "type"
+  },
+  {
+   "file": "rail_abs_bool.json",
+   "reason": "a boolean where rail_abs belongs",
+   "rule": "type"
+  },
+  {
+   "file": "repeated_key.json",
+   "reason": "a key appears twice",
+   "rule": "keys"
+  },
+  {
+   "file": "repeated_key_in_window.json",
+   "reason": "a key appears twice inside window",
+   "rule": "keys"
+  },
+  {
+   "file": "nan_literal.json",
+   "reason": "JSON has no NaN",
+   "rule": "json"
+  },
+  {
+   "file": "number_overflow.json",
+   "reason": "1e400 overflows to infinity, not a finite number",
+   "rule": "json"
+  },
+  {
+   "file": "integer_overflow.json",
+   "reason": "a 401-digit integer is not a finite number",
+   "rule": "json"
+  },
+  {
+   "file": "top_level_array.json",
+   "reason": "the document must be an object",
+   "rule": "type"
+  },
+  {
+   "file": "top_level_null.json",
+   "reason": "the document must be an object",
+   "rule": "type"
+  },
+  {
+   "file": "byte_order_mark.json",
+   "reason": "a UTF-8 byte-order mark before the document is not JSON",
+   "rule": "json"
+  },
+  {
+   "file": "rail_abs_overflow.json",
+   "reason": "rail_abs 1e400 overflows to infinity",
+   "rule": "json"
+  },
+  {
+   "file": "rail_abs_duplicate.json",
+   "reason": "rail_abs appears twice",
+   "rule": "keys"
+  },
+  {
+   "file": "rail_abs_bigint.json",
+   "reason": "rail_abs as a 401-digit integer is not a finite number",
+   "rule": "json"
+  }
+ ],
+ "streams": [
+  {
+   "name": "stim_negative",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     -1.0
+    ]
+   ]
+  },
+  {
+   "name": "stim_fraction",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     131.5
+    ]
+   ]
+  },
+  {
+   "name": "stim_trial_zero",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     31.0
+    ]
+   ]
+  },
+  {
+   "name": "stim_99",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     99.0
+    ]
+   ]
+  },
+  {
+   "name": "stim_too_large",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     2147483648.0
+    ]
+   ]
+  },
+  {
+   "name": "stim_huge",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     1e+300
+    ]
+   ]
+  },
+  {
+   "name": "stim_nan",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     "nan"
+    ]
+   ]
+  },
+  {
+   "name": "stim_inf",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     "inf"
+    ]
+   ]
+  },
+  {
+   "name": "stim_negative_inf",
+   "kind": "stim",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     "-inf"
+    ]
+   ]
+  },
+  {
+   "name": "stim_first_row",
+   "kind": "stim",
+   "bad_row": 0,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     31.0
+    ]
+   ]
+  },
+  {
+   "name": "eeg_nan",
+   "kind": "sample",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     1.0,
+     11.0,
+     "nan",
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ]
+   ]
+  },
+  {
+   "name": "eeg_negative_inf",
+   "kind": "sample",
+   "bad_row": 3,
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ],
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     "-inf",
+     0.0
+    ]
+   ]
+  },
+  {
+   "name": "eeg_first_row",
+   "kind": "sample",
+   "bad_row": 0,
+   "rows": [
+    [
+     "nan",
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ]
+   ]
+  }
+ ],
+ "valid_streams": [
+  {
+   "name": "stim_max_code",
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     0.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     2147483647.0
+    ],
+    [
+     301.0,
+     311.0,
+     321.0,
+     331.0,
+     341.0,
+     351.0,
+     361.0,
+     371.0,
+     0.0
+    ]
+   ]
+  },
+  {
+   "name": "stim_code_100",
+   "rows": [
+    [
+     1.0,
+     11.0,
+     21.0,
+     31.0,
+     41.0,
+     51.0,
+     61.0,
+     71.0,
+     0.0
+    ],
+    [
+     101.0,
+     111.0,
+     121.0,
+     131.0,
+     141.0,
+     151.0,
+     161.0,
+     171.0,
+     100.0
+    ],
+    [
+     201.0,
+     211.0,
+     221.0,
+     231.0,
+     241.0,
+     251.0,
+     261.0,
+     271.0,
+     0.0
+    ]
+   ]
+  }
+ ],
+ "rail_streams": [
+  {
+   "name": "rail_run_one_short_plus_rejected_stim",
+   "reason": "L - 1 accepted samples at the rail plus a rejected one (bad stim) at the rail: decides",
+   "rows": [
+    [
+     1,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     1,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      131.0
+     ]
+    ],
+    [
+     125,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     249,
+     [
+      1000.0,
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     1,
+     [
+      1000.0,
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      99.0
+     ]
+    ],
+    [
+     250,
+     [
+      1000.0,
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ]
+   ],
+   "rejected": [
+    {
+     "row": 376,
+     "kind": "stim"
+    }
+   ],
+   "decisions": [
+    [
+     625,
+     2,
+     []
+    ]
+   ]
+  },
+  {
+   "name": "rail_run_one_short_plus_rejected_nan",
+   "reason": "L - 1 accepted samples at the rail plus a rejected one (NaN on Fz) at the rail: decides",
+   "rows": [
+    [
+     1,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     1,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      131.0
+     ]
+    ],
+    [
+     125,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     249,
+     [
+      1000.0,
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     1,
+     [
+      "nan",
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     250,
+     [
+      1000.0,
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ]
+   ],
+   "rejected": [
+    {
+     "row": 376,
+     "kind": "sample"
+    }
+   ],
+   "decisions": [
+    [
+     625,
+     2,
+     []
+    ]
+   ]
+  },
+  {
+   "name": "rail_run_whole_window_with_rejected_dip",
+   "reason": "the whole window at the rail with a rejected row (bad stim) below it mid-run: refuses",
+   "rows": [
+    [
+     1,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     1,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      131.0
+     ]
+    ],
+    [
+     124,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     250,
+     [
+      1000.0,
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ],
+    [
+     1,
+     [
+      1000.0,
+      2000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      99.0
+     ]
+    ],
+    [
+     250,
+     [
+      1000.0,
+      1000000.0,
+      3000.0,
+      4000.0,
+      5000.0,
+      6000.0,
+      7000.0,
+      8000.0,
+      0.0
+     ]
+    ]
+   ],
+   "rejected": [
+    {
+     "row": 376,
+     "kind": "stim"
+    }
+   ],
+   "decisions": [
+    [
+     625,
+     0,
+     [
+      1
+     ]
+    ]
+   ]
+  }
+ ],
+ "valid_models": [
+  {
+   "file": "valid_rail_abs_integer.json",
+   "reason": "an integer is a JSON number: pins exactly as 1000000.0",
+   "rail_abs": 1000000.0
+  },
+  {
+   "file": "valid_rail_abs_exponent.json",
+   "reason": "exponent notation: pins exactly as 1000000.0",
+   "rail_abs": 1000000.0
+  },
+  {
+   "file": "valid_rail_abs_u64_max.json",
+   "reason": "an integer above 2^63 still loads; nothing reaches it",
+   "rail_abs": 1.8446744073709552e+19
+  }
+ ]
+}

@@ -1,0 +1,207 @@
+# Continuous integration (see docs/ci.md for what each step proves and what a run costs).
+# Ubuntu runs on every push to main and every pull request (pushes to other branches do not run
+# CI). macOS runs alongside it when the repository is public, where Actions minutes are free; in a
+# private copy, where macOS bills at 10x, it runs weekly and on demand only (Actions tab -> ci ->
+# Run workflow).
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "0 6 * * 1"  # Mondays 06:00 UTC: the weekly macOS run
+  workflow_dispatch:
+
+concurrency:
+  # One group per event and ref: a push to main and the weekly run never cancel each other, and
+  # only a pull request's stale run is cancelled by a newer push, so every main commit gets a full run.
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_STABLE: "1.94.1"
+  RUST_NIGHTLY: nightly-2026-11-09  # Miri and cargo-fuzz; the nightly the plan was verified on
+
+jobs:
+  linux:
+    name: Ubuntu (tests, sanitizers, fuzz, Miri)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CC: clang
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Data guard
+        run: |
+          scripts/test_hooks.sh
+          scripts/check_tracked.sh
+
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ninja-build libclang-rt-18-dev
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_STABLE }}
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/mi_core  # not fuzz/: its nightly ASan build would be cached under the stable key
+
+      - name: Rust tests and lints
+        working-directory: rust/mi_core
+        run: |
+          cargo fmt --check
+          cargo clippy --all-targets -- -D warnings
+          cargo test
+          cargo fmt --check --manifest-path fuzz/Cargo.toml
+          cargo clippy --manifest-path fuzz/Cargo.toml -- -D warnings
+          cargo build --release --bin mi-replay
+
+      - name: C++ tests (dev, ubsan, asan, release)
+        working-directory: cpp
+        run: |
+          for preset in dev ubsan asan release; do
+            cmake --preset "$preset"
+            cmake --build --preset "$preset"
+            ctest --preset "$preset"
+          done
+
+      # Public EEG for the real-data parity test: EEGMMIDB subject 1, runs 4, 8 and 12 (about
+      # 8 MB). The EDF files are cached; the key changes only when the pinned checksums do.
+      - uses: actions/cache@v4
+        with:
+          path: public-data/eegmmidb/edf
+          key: eegmmidb-s001-${{ hashFiles('python/mi_ref/eegmmidb_sha256.txt') }}
+
+      - name: Python tests with both cores built and real public EEG
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -e "./python[dev,live]"
+          (cd rust/mi_core && maturin develop --release)
+          pip install ./cpp
+          # up to 3 tries: a cache miss downloads from physionet.org, and a resumed fetch skips finished runs
+          for try in 1 2 3; do
+            python -m mi_ref.eegmmidb --out public-data/eegmmidb --subjects 1 --keep-edf && break
+            [ "$try" = 3 ] && exit 1
+            sleep 15
+          done
+          cd python
+          REQUIRE_CORES=mi_core,mi_core_cpp REQUIRE_PUBLIC_DATA=1 REQUIRE_LSL=1 pytest -q
+
+      # Stable steps are done: installing nightly below also makes it rustup's default.
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_NIGHTLY }}
+          components: miri, rust-src
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz@0.13.2
+
+      - name: Miri (library unit tests)
+        working-directory: rust/mi_core
+        env:
+          # Miri randomizes the last bits of ln() and other libm results by default; the
+          # contract relies on the platform's libm, so test with the exact results. Two unit
+          # tests read golden model files, which Miri's isolation would block.
+          MIRIFLAGS: -Zmiri-deterministic-floats -Zmiri-disable-isolation
+        run: cargo "+$RUST_NIGHTLY" miri test --lib
+
+      - name: Fuzz smoke (60 s per target)
+        run: |
+          python3 scripts/fuzz_seeds.py fuzz-corpus
+          mkdir -p fuzz-artifacts
+          (cd cpp && cmake --preset fuzz && cmake --build --preset fuzz)
+          for t in model csv; do
+            "cpp/build/fuzz/fuzz_$t" -max_total_time=60 -timeout=10 -artifact_prefix="fuzz-artifacts/cpp-$t-" "fuzz-corpus/$t"
+          done
+          cd rust/mi_core
+          for t in model_json:model parse_csv:csv decode_stream:stream; do
+            # --target: the prebuilt cargo-fuzz from install-action is a musl binary and would
+            # default to the musl target, which AddressSanitizer cannot use (static libc)
+            cargo "+$RUST_NIGHTLY" fuzz run --target x86_64-unknown-linux-gnu "${t%%:*}" "$GITHUB_WORKSPACE/fuzz-corpus/${t##*:}" -- \
+              -max_total_time=60 -timeout=10 -artifact_prefix="$GITHUB_WORKSPACE/fuzz-artifacts/rust-${t%%:*}-"
+          done
+
+      - name: Keep fuzz crash inputs
+        if: failure() || cancelled()  # a job timeout cancels; keep what a hang left
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-artifacts
+          path: fuzz-artifacts/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  macos:
+    name: macOS
+    if: ${{ !github.event.repository.private || github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' }}
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Data guard
+        run: |
+          scripts/test_hooks.sh
+          scripts/check_tracked.sh
+
+      - name: System packages
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: brew install ninja
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.RUST_STABLE }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust/mi_core
+
+      - name: Rust tests
+        working-directory: rust/mi_core
+        run: |
+          cargo test
+          cargo build --release --bin mi-replay
+
+      - name: C++ tests (dev, ubsan, release)
+        working-directory: cpp
+        run: |
+          for preset in dev ubsan release; do
+            cmake --preset "$preset"
+            cmake --build --preset "$preset"
+            ctest --preset "$preset"
+          done
+
+      - name: Python tests with both cores built
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          pip install -e "./python[dev]"
+          (cd rust/mi_core && maturin develop --release)
+          pip install ./cpp
+          cd python
+          REQUIRE_CORES=mi_core,mi_core_cpp pytest -q

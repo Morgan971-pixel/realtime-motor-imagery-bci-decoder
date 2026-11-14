@@ -1,0 +1,19 @@
+#!/usr/bin/env bash
+# Pre-commit guard: participant recordings and trained models never enter git.
+# Policy mirror: keep in sync with the "Participant recordings" block in .gitignore.
+set -euo pipefail
+data_ext='csv|tsv|pkl|pickle|joblib|npz|npy|mat|h5|hdf5|fif|edf|bdf|gdf|set|vhdr|vmrk|eeg|xdf|parquet|pt|pth|onnx|gz|zip'
+staged=$(git -c core.quotepath=off diff --cached --name-only --no-renames --diff-filter=ACM)
+bad_data=$(printf '%s\n' "$staged" \
+  | grep -Ei "(^|/)(data|results-local|models|public-data)/|\.(${data_ext})$" \
+  | grep -Ev '^golden/[^/]+\.csv$' || true)
+bad_model=$(printf '%s\n' "$staged" \
+  | grep -Ei '(^|/)[^/]*model[^/]*\.json$' \
+  | grep -Ev '^golden/(invalid/)?[^/]+\.json$' || true)
+bad=$(printf '%s\n%s\n' "$bad_data" "$bad_model" | grep -v '^$' || true)
+if [ -n "$bad" ]; then
+  echo "Blocked: participant data or model files are staged:" >&2
+  echo "$bad" >&2
+  echo "Unstage with: git rm --cached <file>" >&2
+  exit 1
+fi

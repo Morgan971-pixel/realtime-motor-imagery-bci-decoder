@@ -1,0 +1,31 @@
+[package]
+name = "mi_core"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.80"
+description = "Real-time motor-imagery decoder core (inference only), per docs/model-format.md"
+license = "MIT"
+publish = false
+
+[lib]
+name = "mi_core"
+crate-type = ["rlib", "cdylib"]
+
+[features]
+python = ["dep:pyo3"]
+
+[dependencies]
+pyo3 = { version = "0.22", features = ["extension-module"], optional = true }
+serde = { version = "1", features = ["derive"] }
+# float_roundtrip: parse every number to the correctly rounded double, like Python and C++
+# (the default fast path can be one unit in the last place off).
+serde_json = { version = "1", features = ["float_roundtrip"] }
+thiserror = "2"
+
+[dev-dependencies]
+criterion = { version = "0.7", default-features = false, features = ["cargo_bench_support"] }
+proptest = "1"
+
+[[bench]]
+name = "decoder"
+harness = false

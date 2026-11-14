@@ -1,0 +1,13 @@
+[build-system]
+requires = ["maturin>=1.5,<2.0"]
+build-backend = "maturin"
+
+[project]
+name = "mi-core"
+version = "0.1.0"
+description = "Rust inference core for mi-realtime"
+requires-python = ">=3.11"
+
+[tool.maturin]
+features = ["python"]
+module-name = "mi_core"

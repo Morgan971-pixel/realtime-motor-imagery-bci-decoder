@@ -1,0 +1,40 @@
+# Fuzz targets for mi_core (cargo-fuzz layout; needs nightly Rust and `cargo install cargo-fuzz`).
+# Its own workspace, so `cargo test` and `cargo build` in rust/mi_core never build it.
+# Run: cargo +nightly fuzz run <target> <corpus dir> -- -max_total_time=60 (see docs/ci.md)
+[package]
+name = "mi_core-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[workspace]
+
+[dependencies]
+libfuzzer-sys = "0.4"
+
+[dependencies.mi_core]
+path = ".."
+
+[[bin]]
+name = "model_json"
+path = "fuzz_targets/model_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_csv"
+path = "fuzz_targets/parse_csv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "decode_stream"
+path = "fuzz_targets/decode_stream.rs"
+test = false
+doc = false
+bench = false

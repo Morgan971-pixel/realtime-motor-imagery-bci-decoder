@@ -1,0 +1,55 @@
+.venv/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+.DS_Store
+target/
+build/
+
+# Fuzzing: seed corpora are rebuilt from golden/ (scripts/fuzz_seeds.py) and never committed,
+# and neither are the inputs a fuzzer saves (crashes may hold whatever bytes it was fed).
+fuzz-corpus/
+fuzz-artifacts/
+crash-*
+leak-*
+timeout-*
+oom-*
+slow-unit-*
+minimized-from-*
+
+# Participant recordings and trained models never enter git.
+# Policy mirror: keep in sync with scripts/hooks/pre-commit.
+data/
+results-local/
+models/
+public-data/
+*model*.json
+*.csv
+*.tsv
+*.pkl
+*.pickle
+*.joblib
+*.npz
+*.npy
+*.mat
+*.h5
+*.hdf5
+*.fif
+*.edf
+*.bdf
+*.gdf
+*.set
+*.vhdr
+*.vmrk
+*.eeg
+*.xdf
+*.parquet
+*.pt
+*.pth
+*.onnx
+*.gz
+*.zip
+# Synthetic goldens are the one exception (works because golden/ itself is not ignored).
+!golden/*.csv
+!golden/*.json
+!golden/invalid/*.json

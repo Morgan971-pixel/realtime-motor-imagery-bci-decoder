@@ -1,0 +1,28 @@
+{
+ "schema_version": 1,
+ "fs": 250.0,
+ "channels": [
+  "Fz",
+  "C3",
+  "Cz",
+  "C4",
+  "Pz",
+  "PO7",
+  "Oz",
+  "PO8"
+ ],
+ "offset": "first_sample",
+ "window": {
+  "start_s": 0.5,
+  "len_s": 2.0
+ },
+ "bands": [],
+ "lda": {
+  "w": [],
+  "b": -19.391831086424165
+ },
+ "labels": {
+  "score_le_0": 1,
+  "score_gt_0": 2
+ }
+}
