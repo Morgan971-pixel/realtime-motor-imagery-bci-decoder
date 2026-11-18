@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Exercises scripts/hooks/pre-commit in a throwaway repo. Run from anywhere: scripts/test_hooks.sh
+# Exercises scripts/hooks/ in a throwaway repo. Run from anywhere: scripts/test_hooks.sh
 set -euo pipefail
 hook="$(cd "$(dirname "$0")" && pwd)/hooks/pre-commit"
 guard="$(cd "$(dirname "$0")" && pwd)/check_tracked.sh"
@@ -57,4 +57,25 @@ git add -f golden/sub/x.csv;       tracked block "golden/sub/x.csv added with -f
 git add -f data/notes.txt;         tracked block "data/notes.txt added with -f"
 git add -f public-data/eegmmidb/SHA256SUMS.txt; tracked block "public-data/eegmmidb/SHA256SUMS.txt added with -f"
 git add -f results/s01_model.json; tracked block "results/s01_model.json added with -f"
+
+# commit-msg and pre-push hand off to user-wide hooks (git config --global core.hooksPath).
+# GIT_CONFIG_GLOBAL points git at a throwaway global config so the real one is never read.
+hooks_dir="$(cd "$(dirname "$hook")" && pwd)"
+handoff() {  # usage: handoff allow|block "description" hook-name [stdin]
+  if printf '%s' "${4:-}" | GIT_CONFIG_GLOBAL="$tmp/gitconfig" "$hooks_dir/$3" msg >/dev/null 2>&1; then got=allow; else got=block; fi
+  if [ "$got" != "$1" ]; then echo "FAIL  expected handoff $1: $2"; exit 1; fi
+  echo "ok    handoff $1  $2"
+}
+: > "$tmp/gitconfig"
+handoff allow "commit-msg with no user-wide hooks" commit-msg
+mkdir -p "$tmp/user-hooks"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/user-hooks/commit-msg"
+printf '#!/bin/sh\ngrep -q refs/heads/main\n' > "$tmp/user-hooks/pre-push"
+chmod +x "$tmp/user-hooks/commit-msg" "$tmp/user-hooks/pre-push"
+git config --file "$tmp/gitconfig" core.hooksPath "$tmp/user-hooks"
+handoff block "commit-msg runs a rejecting user-wide hook" commit-msg
+handoff allow "pre-push passes its stdin to the user-wide hook" pre-push "refs/heads/main abc refs/heads/main def"
+handoff block "pre-push with stdin the user-wide hook rejects" pre-push "refs/heads/other abc refs/heads/other def"
+git config --file "$tmp/gitconfig" core.hooksPath "$hooks_dir"
+handoff allow "user-wide path pointing back at scripts/hooks (no loop)" commit-msg
 echo "all hook checks passed"

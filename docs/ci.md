@@ -13,7 +13,7 @@ Every push to `main` gets a full run, and a push never cancels the weekly run (o
 
 ## What the Ubuntu job checks, in order
 
-1. **Data guard.** `scripts/test_hooks.sh` proves the pre-commit hook still blocks data. `scripts/check_tracked.sh` fails if any tracked file matches the data policy in `.gitignore`, ignoring letter case. That catches files that skipped the hook (`git commit --no-verify`, `git add -f`).
+1. **Data guard.** `scripts/test_hooks.sh` proves the pre-commit hook still blocks data, and that `commit-msg` and `pre-push` hand off to the user-wide hooks (`git config --global core.hooksPath`) that `scripts/hooks` would otherwise hide. `scripts/check_tracked.sh` fails if any tracked file matches the data policy in `.gitignore`, ignoring letter case. That catches files that skipped the hook (`git commit --no-verify`, `git add -f`).
 2. **Rust.** `cargo fmt --check`, clippy with warnings as errors, and `cargo test`. The fuzz crate gets fmt and clippy too. Then the release `mi-replay` build the CLI tests use.
 3. **C++.** `ctest` under the `dev`, `ubsan`, `asan` and `release` presets. ASan (AddressSanitizer, which catches out-of-bounds reads and use-after-free) runs only here: it hangs at startup on macOS.
 4. **Python.** The full suite with both native cores built and required (`REQUIRE_CORES=mi_core,mi_core_cpp`), so a core that fails to build fails the run instead of being skipped. Before it, `python -m mi_ref.eegmmidb --subjects 1 --keep-edf` fetches public EEGMMIDB person 1 (about 8 MB; the EDF files are cached under a key built from the pinned checksums) and `REQUIRE_PUBLIC_DATA=1` makes the real-data parity test (docs/public-data.md) mandatory.

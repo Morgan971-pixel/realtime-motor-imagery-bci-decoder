@@ -1,0 +1,11 @@
+#!/bin/sh
+# core.hooksPath=scripts/hooks hides any user-wide hooks (git config --global core.hooksPath),
+# so this hook runs the user-wide hook of the same name, if one exists. pre-push is a symlink
+# to this file. A clone with no user-wide hooks gets a no-op.
+dir=$(git config --global --type=path --get core.hooksPath) || exit 0
+here=$(cd "$(dirname "$0")" && pwd -P)
+there=$(cd "$dir" 2>/dev/null && pwd -P) || exit 0
+[ "$there" = "$here" ] && exit 0   # user-wide path points back here: nothing to hand off
+hook="$there/$(basename "$0")"
+[ -x "$hook" ] || exit 0
+exec "$hook" "$@"

@@ -66,7 +66,7 @@ Recordings of BCIS members never enter this repository. A pre-commit hook and a 
 
     python3 -m venv .venv && source .venv/bin/activate
     pip install -e "./python[dev,live]"      # includes maturin for the Rust core below
-    git config core.hooksPath scripts/hooks   # turns on the data guard (once per clone)
+    git config core.hooksPath scripts/hooks   # turns on the data guard (once per clone); commit-msg and pre-push run your user-wide hooks, if any
     scripts/test_hooks.sh                     # proves the guard blocks data
     cd python && pytest
 
