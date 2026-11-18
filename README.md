@@ -5,7 +5,7 @@
 Decodes imagined left versus right hand movement from 8-channel EEG as the samples arrive. The electrode layout is that of the g.tec Unicorn headset used by the Brain-Computer Interface Society at Johns Hopkins (BCIS). The same decoder is written three times against one written contract ([docs/model-format.md](docs/model-format.md)): a Python reference and two native cores, Rust and C++, which make bit-identical decisions.
 
 - **Fast:** about 18 µs per decision (median) in Rust and C++, about 190 µs in Python ([Benchmarks](#benchmarks)).
-- **Checked:** 792 Python, 59 Rust and 57 C++ tests. CI runs AddressSanitizer, UndefinedBehaviorSanitizer, fuzzing and Miri, and requires every core to match the reference on synthetic and real public EEG ([docs/ci.md](docs/ci.md)).
+- **Checked:** 825 Python, 59 Rust and 57 C++ tests. CI runs AddressSanitizer, UndefinedBehaviorSanitizer, fuzzing and Miri, and requires every core to match the reference on synthetic and real public EEG ([docs/ci.md](docs/ci.md)).
 - **Live:** reads EEG over Lab Streaming Layer (LSL), merges cues from its own cue program, and publishes each decision as an LSL marker. A recorder and a train command turn a short cued session into a personal model ([docs/lsl-live.md](docs/lsl-live.md)).
 - **Honest:** accuracy comes only from cross-validation that holds out whole blocks of trials in time, next to the 95% chance threshold.
 
@@ -14,9 +14,10 @@ Decodes imagined left versus right hand movement from 8-channel EEG as the sampl
 | Data | People | Above chance | Mean accuracy |
 |---|---:|---:|---:|
 | PhysioNet EEGMMIDB, cut to the Unicorn's 8 electrode positions | 106 | 56 (about 5 expected by luck) | 64.3% |
+| Cho et al. 2017 (BioSemi, 512 Hz), cut to the same 8 positions | 52 | 40 (about 2.6 expected by luck) | 63.8% |
 | BCIS recordings (Unicorn headset) | 5 | 1 (about 0.25 expected by luck) | 49.7% |
 
-The same pipeline decodes real EEG when the signal is there ([docs/public-data.md](docs/public-data.md)), so the club recordings' near-chance result points at the recordings, not the decoder. Several of their channels sit pinned at the amplifier's limit for most of a session. The engineering numbers above are the headline; the accuracy is reported as measured.
+The same pipeline decodes real EEG when the signal is there, on two independent public datasets ([docs/public-data.md](docs/public-data.md)), so the club recordings' near-chance result points at the recordings, not the decoder. Several of their channels sit pinned at the amplifier's limit for most of a session. The engineering numbers above are the headline; the accuracy is reported as measured.
 
 ## Try it in five minutes (no headset)
 
@@ -49,6 +50,8 @@ flowchart LR
 
 Each decision filters the 8 channels into four frequency bands with causal filters, takes a 2-second window starting 0.5 s after an imagery cue, projects it with common spatial patterns (CSP), and classifies the log-variance features with linear discriminant analysis (LDA). The contract fixes the order of every floating-point operation, which is why Rust and C++ agree bit for bit ([docs/rust-vs-cpp.md](docs/rust-vs-cpp.md) compares the two).
 
+The whole system, the live path step by step, and module maps of the Python package and both native cores: [docs/architecture.md](docs/architecture.md).
+
 ## Privacy
 
 Recordings of BCIS members never enter this repository. A pre-commit hook and a CI check refuse data files, and a release test refuses private paths and personal addresses. Everything in `golden/` is synthetic; public data is downloaded on demand (`public-data/` is git-ignored). Club results appear only as aggregate numbers, and the recorder and train commands refuse to write inside the repository.
@@ -56,7 +59,7 @@ Recordings of BCIS members never enter this repository. A pre-commit hook and a 
 ## Credits and licence
 
 - Recordings and protocol: the Brain-Computer Interface Society at Johns Hopkins.
-- Public data: Schalk et al., "BCI2000: a general-purpose brain-computer interface (BCI) system", IEEE Trans. Biomed. Eng. 51(6), 2004, and Goldberger et al., "PhysioBank, PhysioToolkit, and PhysioNet", Circulation 101(23), 2000, under the Open Data Commons Attribution licence v1.0.
+- Public data: Schalk et al., "BCI2000: a general-purpose brain-computer interface (BCI) system", IEEE Trans. Biomed. Eng. 51(6), 2004, and Goldberger et al., "PhysioBank, PhysioToolkit, and PhysioNet", Circulation 101(23), 2000, under the Open Data Commons Attribution licence v1.0; and Cho et al., "EEG datasets for motor imagery brain-computer interface", GigaScience 6(7), 2017 (data doi 10.5524/100295), under CC0 1.0.
 - Code: MIT licence ([LICENSE](LICENSE)).
 
 ## Development setup
@@ -146,11 +149,13 @@ Python receives the EEG stream through LSL and can send samples to the Python, R
 
 ## Public data: does the pipeline decode real EEG?
 
-Yes. On the public PhysioNet EEG Motor Movement/Imagery Database, cut down to the club headset's 8 electrode positions and run through the unchanged pipeline, 56 of 106 people decode imagined left vs right fist above chance (about 5 expected by luck; mean 64.3%), against 1 of 5 on the club recordings. The same data gives the cores their first real-EEG parity test (Rust and C++ bit-identical, within 1.1e-15 of Python), at 160 Hz instead of 250. Fetching, conversion, attribution and the full results: [docs/public-data.md](docs/public-data.md).
+Yes. On the public PhysioNet EEG Motor Movement/Imagery Database, cut down to the club headset's 8 electrode positions and run through the unchanged pipeline, 56 of 106 people decode imagined left vs right fist above chance (about 5 expected by luck; mean 64.3%), against 1 of 5 on the club recordings. The same data gives the cores their first real-EEG parity test (Rust and C++ bit-identical, within 1.1e-15 of Python), at 160 Hz instead of 250. A second, independent dataset agrees: on Cho et al. 2017 (52 people, BioSemi headset, 512 Hz, 200 trials each), 40 of 52 decode above chance (about 2.6 expected by luck; mean 63.8%). The cores stay bit-identical at 512 Hz. Fetching, conversion, attribution and the full results: [docs/public-data.md](docs/public-data.md).
 
     cd python
     python -m mi_ref.eegmmidb --out ../public-data/eegmmidb     # ~570 MB of CSV, git-ignored
     python -m mi_ref.evaluate --data-dir ../public-data/eegmmidb --fs 160 --min-trials 10
+    python -m mi_ref.cho2017 --out ../public-data/cho2017       # 10.7 GB download, 4.9 GB of CSV kept
+    python -m mi_ref.evaluate --data-dir ../public-data/cho2017 --fs 512
 
 ## Regenerate the golden vectors
 
@@ -178,6 +183,7 @@ The lesson: a green local run on one platform is not proof of memory safety. Run
 - The chance threshold treats trials as independent; trials inside a calibration block are correlated, so a narrow pass is weak evidence. With N subjects, about 0.05 x N pass by luck alone.
 - Sessions of one subject are pooled; there is no leave-one-session-out evaluation yet.
 - The public-data control drops EEGMMIDB's 128 Hz recordings (people 88, 92, 100) instead of resampling them.
+- GigaDB publishes no checksums for Cho et al. 2017; the pinned SHA-256 come from the first download. The 512 Hz parity test needs that data, so it runs locally, not in CI.
 - The live path is tested with simulated headset streams and public EEG; a session with the real Unicorn headset is still to come (checklist in docs/lsl-live.md).
 - There is no test for a label-correlated drift inside the 8-30 Hz band.
 - The pinned-channel check refuses only a window where a channel is at the rail on every sample; a channel that dips below the rail even once still decides, however wild its values.

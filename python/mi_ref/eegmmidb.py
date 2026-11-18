@@ -101,16 +101,16 @@ def pinned_sha256(path: Path = SHA256_FILE) -> dict[str, str]:
     return out
 
 
-def parse_subjects(spec: str) -> list[int]:
-    """'1-109', '1,5,7-9' -> sorted unique subject numbers, each within 1..109."""
+def parse_subjects(spec: str, subjects: range = SUBJECTS) -> list[int]:
+    """'1-109', '1,5,7-9' -> sorted unique subject numbers, each within subjects (1..109 here)."""
     out: set[int] = set()
     for part in spec.split(","):
         lo, sep, hi = part.partition("-")
         if not lo.isdigit() or (sep and not hi.isdigit()):
             raise ValueError(f"bad subject range {part!r}")
         first, last = int(lo), int(hi) if sep else int(lo)
-        if not (SUBJECTS.start <= first <= last < SUBJECTS.stop):
-            raise ValueError(f"subjects must be within 1-109, got {part!r}")
+        if not (subjects.start <= first <= last < subjects.stop):
+            raise ValueError(f"subjects must be within {subjects.start}-{subjects.stop - 1}, got {part!r}")
         out.update(range(first, last + 1))
     return sorted(out)
 

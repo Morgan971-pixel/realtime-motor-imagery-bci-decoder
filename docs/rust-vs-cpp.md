@@ -13,7 +13,7 @@
 | `unsafe` / sanitizer-only checks | 0 `unsafe` blocks; Miri on 23 unit tests | UBSan + library bounds checks everywhere, ASan on Linux |
 | Fuzz targets | 3 (cargo-fuzz) | 2 (libFuzzer) |
 
-Both pass the same fixtures: the synthetic golden recordings and 72 invalid models plus 13 invalid streams in `golden/invalid/`. The Python suite (792 tests) checks each core against the Python reference through its bindings, on synthetic data and on real public EEG.
+Both pass the same fixtures: the synthetic golden recordings and 72 invalid models plus 13 invalid streams in `golden/invalid/`. The Python suite (825 tests) checks each core against the Python reference through its bindings, on synthetic data and on real public EEG.
 
 **Speed** (`python -m mi_ref.bench`, Apple M4, from the README table):
 
