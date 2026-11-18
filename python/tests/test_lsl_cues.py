@@ -8,11 +8,13 @@ import uuid
 import numpy as np
 import pytest
 
-from mi_ref.cue_merge import CueMerger
+from helpers import assert_same_decisions
+from mi_ref.cores import make_decoder
 from mi_ref.cues import marker_info
 from mi_ref.golden import GOLDEN_DIR
-from mi_ref.lsl_live import make_decoder, open_streams, parse_channels, run, samples
+from mi_ref.lsl_live import open_streams, parse_channels, run
 from mi_ref.lsl_replay import cue_onsets, publish_split, split_stream_info
+from mi_ref.lsl_source import LiveSource
 from mi_ref.model import Model
 from mi_ref.recording import Recording, load_recording
 
@@ -52,38 +54,19 @@ class Capture:
         return decision
 
 
-def _assert_golden(decisions, expected):
-    keys = ("sample", "trial", "true_label", "label", "pinned")
-    assert [tuple(d[k] for k in keys) for d in decisions] == [tuple(e[k] for k in keys) for e in expected]
-    for d, e in zip(decisions, expected):
-        np.testing.assert_allclose(d["features"], e["features"], rtol=1e-9)
-        assert abs(d["score"] - e["score"]) < 1e-7
-
-
-@pytest.fixture(params=["python", "rust", "cpp"])
-def core(request):
-    try:
-        return make_decoder(request.param, MODEL, MODEL_TEXT)
-    except RuntimeError:
-        required = {name.strip() for name in os.environ.get("REQUIRE_CORES", "").split(",")}
-        if {"rust": "mi_core", "cpp": "mi_core_cpp"}.get(request.param) in required:
-            raise
-        pytest.skip(f"{request.param} core is not built")
-
-
-def test_split_streams_reproduce_the_golden_decisions_in_every_core(core):
+def test_split_streams_reproduce_the_golden_decisions_in_every_core(any_core):
     eeg, cues, inlet, eeg_indices, stim_index, cue_inlet = _streams()
     assert sorted(eeg_indices) == sorted(POSITIONS) and stim_index is None
     publisher = threading.Thread(target=publish_split, args=(RECORDING, MODEL), kwargs=dict(
         eeg_outlet=eeg, cue_outlet=cues, pylsl_module=pylsl, eeg_positions=POSITIONS, paced=False, cues_first=True))
-    capture, lines, messages = Capture(core), [], []
+    capture, lines, messages = Capture(make_decoder(any_core, MODEL_TEXT)), [], []
     publisher.start()
-    count = run(inlet, capture, None, lines.append, eeg_indices=eeg_indices, stim_index=stim_index, timeout=2,
-                max_samples=len(RECORDING.stim), pylsl_module=pylsl, cue_inlet=cue_inlet, fs=MODEL.fs,
-                report=messages.append)
+    count = run(LiveSource(inlet, eeg_indices=eeg_indices, stim_index=stim_index, timeout=2,
+                           max_samples=len(RECORDING.stim), pylsl_module=pylsl, cue_inlet=cue_inlet,
+                           fs=MODEL.fs, report=messages.append), capture, None, lines.append)
     publisher.join(timeout=10)
     assert count == len(RECORDING.stim)
-    _assert_golden(capture.decisions, EXPECTED)
+    assert_same_decisions(capture.decisions, EXPECTED)
     assert len(lines) == 8 and messages == []
 
 
@@ -92,13 +75,14 @@ def test_paced_cues_sent_after_their_samples_still_land_within_the_lag():
     eeg, cues, inlet, eeg_indices, stim_index, cue_inlet = _streams()
     publisher = threading.Thread(target=publish_split, args=(short, MODEL), kwargs=dict(
         eeg_outlet=eeg, cue_outlet=cues, pylsl_module=pylsl, eeg_positions=POSITIONS, paced=True))
-    capture, messages = Capture(make_decoder("python", MODEL, MODEL_TEXT)), []
+    capture, messages = Capture(make_decoder("python", MODEL_TEXT)), []
     publisher.start()
-    run(inlet, capture, None, lambda line: None, eeg_indices=eeg_indices, stim_index=stim_index, timeout=2,
-        max_samples=2000, pylsl_module=pylsl, cue_inlet=cue_inlet, cue_lag=2.0, fs=MODEL.fs,
-        report=messages.append)  # a generous lag: a busy CI machine may push a cue late
+    # a generous lag: a busy CI machine may push a cue late
+    run(LiveSource(inlet, eeg_indices=eeg_indices, stim_index=stim_index, timeout=2, max_samples=2000,
+                   pylsl_module=pylsl, cue_inlet=cue_inlet, cue_lag=2.0, fs=MODEL.fs, report=messages.append),
+        capture, None, lambda line: None)
     publisher.join(timeout=15)
-    _assert_golden(capture.decisions, EXPECTED[:1])  # the first decision falls at sample 1874
+    assert_same_decisions(capture.decisions, EXPECTED[:1])  # the first decision falls at sample 1874
     assert messages == []
 
 
@@ -129,11 +113,11 @@ def test_bursty_timestamps_shift_cues_by_a_steady_few_samples():
     for i in range(n):
         row[:8] = RECORDING.signal[i]
         eeg.push_sample(row.tolist(), timestamp=float(stamps[i]))
-    merger = CueMerger(MODEL.fs, lag=1.0)
-    placed = [i for i, (_, stim, _) in enumerate(samples(inlet, eeg_indices=eeg_indices, cue_inlet=cue_inlet,
-                                                         merger=merger, timeout=2, max_samples=n)) if stim]
-    inlet.close_stream()
-    cue_inlet.close_stream()
+    source = LiveSource(inlet, eeg_indices=eeg_indices, cue_inlet=cue_inlet, cue_lag=1.0, fs=MODEL.fs, timeout=2,
+                        max_samples=n, pylsl_module=pylsl)
+    with source:
+        placed = [i for i, (_, stim, _) in enumerate(source) if stim]
+    merger = source.merger
     errors = [p - i for p, (i, _) in zip(placed, onsets)]
     assert len(placed) == len(onsets) and (merger.late, merger.collisions) == (0, 0)
     assert all(-16 <= e <= 0 for e in errors), errors  # measured -10..-7; margin for a busy CI machine
@@ -168,8 +152,8 @@ def test_a_lost_stream_releases_held_samples_reports_and_ends_cleanly():
         def push(self, sample, stim):
             seen.append((sample[0], stim))
 
-    count = run(eeg, Decoder(), None, print, eeg_indices=list(range(8)), timeout=0.01, pylsl_module=pylsl,
-                cue_inlet=cue, cue_lag=1.0, fs=fs, report=messages.append)
+    count = run(LiveSource(eeg, eeg_indices=list(range(8)), timeout=0.01, pylsl_module=pylsl, cue_inlet=cue,
+                           cue_lag=1.0, fs=fs, report=messages.append), Decoder(), None, print)
     assert count == 10 and [s for s in seen if s[1]] == [(4.0, 231)]
     assert messages[0] == "LSL EEG stream lost: gone"
     assert eeg.closed and cue.closed
@@ -186,8 +170,8 @@ def test_late_and_invalid_cues_are_summarised():
         def push(self, sample, stim):
             return None
 
-    run(eeg, Decoder(), None, print, eeg_indices=list(range(8)), timeout=0.01, pylsl_module=pylsl,
-        cue_inlet=cue, cue_lag=0.0, fs=fs, report=messages.append)
+    run(LiveSource(eeg, eeg_indices=list(range(8)), timeout=0.01, pylsl_module=pylsl, cue_inlet=cue,
+                   cue_lag=0.0, fs=fs, report=messages.append), Decoder(), None, print)
     assert "dropped late cue 231" in messages[0]
     assert messages[1] == "dropped invalid cue 'x' at 100.012000 s"
     assert messages[-1] == "cues dropped: 1 late, 1 invalid, 0 on an already-cued sample, 0 after the last EEG sample"
@@ -195,10 +179,9 @@ def test_late_and_invalid_cues_are_summarised():
 
 @pytest.mark.parametrize("kwargs,message", [({"stim_index": 8, "fs": 250.0}, "its own stim channel"),
                                             ({"fs": None}, "fs is required")])
-def test_run_refuses_an_unusable_cue_setup(kwargs, message):
+def test_live_source_refuses_an_unusable_cue_setup(kwargs, message):
     with pytest.raises(ValueError, match=message):
-        run(ListInlet([]), None, None, print, eeg_indices=list(range(8)), pylsl_module=pylsl,
-            cue_inlet=ListInlet([]), **kwargs)
+        LiveSource(ListInlet([]), eeg_indices=list(range(8)), pylsl_module=pylsl, cue_inlet=ListInlet([]), **kwargs)
 
 
 def test_losing_the_cue_stream_keeps_decoding_the_eeg():
@@ -212,8 +195,8 @@ def test_losing_the_cue_stream_keeps_decoding_the_eeg():
         def push(self, sample, stim):
             return None
 
-    count = run(eeg, Decoder(), None, print, eeg_indices=list(range(8)), timeout=0.01, pylsl_module=pylsl,
-                cue_inlet=cue, cue_lag=0.0, fs=fs, report=messages.append)
+    count = run(LiveSource(eeg, eeg_indices=list(range(8)), timeout=0.01, pylsl_module=pylsl, cue_inlet=cue,
+                           cue_lag=0.0, fs=fs, report=messages.append), Decoder(), None, print)
     assert count == 10
     assert messages[0] == "LSL cue stream lost: gone; decoding continues without new cues"
     assert messages[1] == "LSL EEG stream lost: gone"

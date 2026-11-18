@@ -9,11 +9,11 @@ import subprocess
 
 import pytest
 
+from helpers import REQUIRED
 from mi_ref.bench import COMMANDS, stale
+from mi_ref.cores import NATIVE
 from mi_ref.golden import GOLDEN_DIR
 
-CORE_OF = {"rust": "mi_core", "cpp": "mi_core_cpp"}
-REQUIRED = {name.strip() for name in os.environ.get("REQUIRE_CORES", "").split(",") if name.strip()}
 EXPECTED = json.loads((GOLDEN_DIR / "expected.json").read_text())
 MODEL, EDGE = str(GOLDEN_DIR / "model.json"), str(GOLDEN_DIR / "edge_stream.csv")
 RAIL_MODEL, RAIL_STREAM = str(GOLDEN_DIR / "rail_model.json"), str(GOLDEN_DIR / "rail_stream.csv")
@@ -22,8 +22,8 @@ RAIL_MODEL, RAIL_STREAM = str(GOLDEN_DIR / "rail_model.json"), str(GOLDEN_DIR / 
 @pytest.fixture(params=sorted(COMMANDS))
 def command(request):
     cmd = COMMANDS[request.param]
-    if request.param in CORE_OF and not os.path.exists(cmd[0]):
-        if CORE_OF[request.param] in REQUIRED:
+    if request.param in NATIVE and not os.path.exists(cmd[0]):
+        if request.param in REQUIRED:
             pytest.fail(f"{cmd[0]} is not built")
         pytest.skip(f"{cmd[0]} is not built")
     if reason := stale(request.param):  # a stale binary would test yesterday's code

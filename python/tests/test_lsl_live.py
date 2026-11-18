@@ -7,7 +7,9 @@ import numpy as np
 import pytest
 
 from mi_ref.golden import GOLDEN_DIR
-from mi_ref.lsl_live import channel_layout, make_decoder, run
+from mi_ref.cores import make_decoder
+from mi_ref.lsl_live import channel_layout, run
+from mi_ref.lsl_source import LiveSource
 from mi_ref.lsl_replay import publish, stream_info
 from mi_ref.model import Model
 from mi_ref.recording import Recording, load_recording
@@ -81,8 +83,7 @@ def test_replay_outlet_preserves_large_stim_codes():
     assert samples[0][0][-1] == float(code)
 
 
-@pytest.mark.parametrize("core", ["python", "rust", "cpp"])
-def test_fake_lsl_stream_decodes_and_publishes_marker_decisions(core):
+def test_fake_lsl_stream_decodes_and_publishes_marker_decisions(any_core):
     recording = load_recording(GOLDEN_DIR / "stream.csv")
     source_id = f"eeg-{uuid.uuid4()}"
     marker_id = f"decisions-{uuid.uuid4()}"
@@ -95,7 +96,7 @@ def test_fake_lsl_stream_decodes_and_publishes_marker_decisions(core):
     marker_inlet = pylsl.StreamInlet(marker_info)
     eeg_inlet.open_stream(timeout=2)
     marker_inlet.open_stream(timeout=2)
-    decoder = make_decoder(core, MODEL, MODEL_TEXT)
+    decoder = make_decoder(any_core, MODEL_TEXT)
     lines = []
     publisher_errors = []
 
@@ -109,9 +110,8 @@ def test_fake_lsl_stream_decodes_and_publishes_marker_decisions(core):
     publisher.start()
     expected_samples = len(recording.stim)
     channel_indices, stim_index = channel_layout(eeg_info)
-    accepted = run(eeg_inlet, decoder, marker_outlet, lines.append,
-                   eeg_indices=channel_indices, stim_index=stim_index,
-                   timeout=1, max_samples=expected_samples, pylsl_module=pylsl)
+    accepted = run(LiveSource(eeg_inlet, eeg_indices=channel_indices, stim_index=stim_index, timeout=1,
+                              max_samples=expected_samples, pylsl_module=pylsl), decoder, marker_outlet, lines.append)
     publisher.join(timeout=10)
     assert not publisher.is_alive()
     assert not publisher_errors
@@ -170,7 +170,7 @@ def test_run_rejects_bad_sample_before_decoder_push():
 
     inlet = Inlet()
     with pytest.raises(ValueError, match="expected 8 EEG values"):
-        run(inlet, Decoder(), eeg_indices=None, max_samples=1, pylsl_module=pylsl)
+        run(LiveSource(inlet, eeg_indices=None, max_samples=1, pylsl_module=pylsl), Decoder())
     assert inlet.closed
 
 

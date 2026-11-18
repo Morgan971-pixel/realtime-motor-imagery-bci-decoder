@@ -5,13 +5,12 @@ A model is trained on runs 4 and 8 and decodes run 12. Skipped when the data is 
 (it is never committed). Set REQUIRE_PUBLIC_DATA=1 (as CI does) to make missing data an
 error. MI_PUBLIC_DATA overrides the folder (default: public-data/eegmmidb in the repo).
 """
-import importlib
 import os
 from pathlib import Path
 
-import numpy as np
 import pytest
 
+from helpers import assert_same_decisions
 from mi_ref.epochs import to_samples
 from mi_ref.eegmmidb import FS
 from mi_ref.events import imagery_markers, markers_from_stim
@@ -19,8 +18,6 @@ from mi_ref.model import decode_recording, train
 from mi_ref.recording import load_recording
 from mi_ref.streaming import StreamingDecoder
 
-CORES = ("mi_core", "mi_core_cpp")
-REQUIRED = {name.strip() for name in os.environ.get("REQUIRE_CORES", "").split(",") if name.strip()}
 DATA = Path(os.environ.get("MI_PUBLIC_DATA", Path(__file__).resolve().parents[2] / "public-data" / "eegmmidb"))
 RUNS = [DATA / "subject001" / f"session{r:03d}" / f"S001R{r:02d}.csv" for r in (4, 8, 12)]
 
@@ -40,24 +37,6 @@ def case(tmp_path_factory):
     return model, path, test_rec, decode_recording(model, test_rec)
 
 
-@pytest.fixture(params=CORES)
-def core(request):
-    try:
-        return importlib.import_module(request.param)
-    except ImportError:
-        if request.param in REQUIRED:
-            raise
-        pytest.skip(f"{request.param} is not built")
-
-
-def _assert_same(got, expected):
-    keys = ("sample", "trial", "true_label", "label", "pinned")
-    assert [tuple(d[k] for k in keys) for d in got] == [tuple(e[k] for k in keys) for e in expected]
-    for d, e in zip(got, expected):
-        np.testing.assert_allclose(d["features"], e["features"], rtol=1e-9)
-        assert abs(d["score"] - e["score"]) < 1e-7
-
-
 def test_reference_decides_every_cue_of_the_held_out_run(case):
     model, _, rec, expected = case
     onsets = [m.sample for m in imagery_markers(markers_from_stim(rec.stim))]
@@ -72,16 +51,16 @@ def test_python_streaming_matches_batch_on_real_eeg(case):
     model, _, rec, expected = case
     dec = StreamingDecoder(model)
     got = [d for s, c in zip(rec.signal, rec.stim) if (d := dec.push(s, c)) is not None]
-    _assert_same(got, expected)
+    assert_same_decisions(got, expected)
 
 
-def test_core_decode_file_matches_reference_on_real_eeg(core, case):
+def test_core_decode_file_matches_reference_on_real_eeg(native_core, case):
     _, path, _, expected = case
-    _assert_same(core.decode_file(str(path), str(RUNS[2])), expected)
+    assert_same_decisions(native_core.decode_file(str(path), str(RUNS[2])), expected)
 
 
-def test_core_streaming_matches_reference_on_real_eeg(core, case):
+def test_core_streaming_matches_reference_on_real_eeg(native_core, case):
     _, path, rec, expected = case
-    dec = core.Decoder(path.read_text())
+    dec = native_core.Decoder(path.read_text())
     got = [d for s, c in zip(rec.signal, rec.stim) if (d := dec.push(s, float(c))) is not None]
-    _assert_same(got, expected)
+    assert_same_decisions(got, expected)

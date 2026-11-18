@@ -14,6 +14,7 @@ from mi_ref.golden import GOLDEN_DIR
 from mi_ref.lsl_live import open_streams, parse_channels
 from mi_ref.lsl_record import record
 from mi_ref.lsl_replay import publish_split, split_stream_info
+from mi_ref.lsl_source import LiveSource
 from mi_ref.model import Model, decode_recording
 from mi_ref.paths import REPO, outside_repo
 from mi_ref.recording import load_recording, save_recording
@@ -51,8 +52,9 @@ def test_a_recorded_session_decodes_offline_exactly_like_live(tmp_path):
     publisher = threading.Thread(target=publish_split, args=(GOLDEN, MODEL), kwargs=dict(
         eeg_outlet=eeg, cue_outlet=cues, pylsl_module=pylsl, eeg_positions=positions, paced=False, cues_first=True))
     publisher.start()
-    rec = record(inlet, fs=MODEL.fs, eeg_indices=eeg_indices, stim_index=stim_index, cue_inlet=cue_inlet,
-                 max_samples=len(GOLDEN.stim), timeout=2, pylsl_module=pylsl, report=pytest.fail)
+    rec = record(LiveSource(inlet, fs=MODEL.fs, eeg_indices=eeg_indices, stim_index=stim_index,
+                            cue_inlet=cue_inlet, max_samples=len(GOLDEN.stim), timeout=2, pylsl_module=pylsl,
+                            report=pytest.fail))
     publisher.join(timeout=10)
     np.testing.assert_array_equal(rec.signal, GOLDEN.signal)
     assert markers_from_stim(rec.stim) == markers_from_stim(GOLDEN.stim)
@@ -76,9 +78,38 @@ def test_main_refuses_an_output_inside_the_repo_or_an_existing_file(tmp_path, ca
     assert existing.read_text() == "x"
 
 
-def test_a_stim_channel_and_a_cue_stream_together_are_refused():
-    with pytest.raises(ValueError, match="not both"):
-        record(None, fs=250.0, stim_index=8, cue_inlet=object(), pylsl_module=pylsl)
+class Pulls:
+    """A stand-in inlet that serves fixed pulls in order; an exception in the list is raised."""
+
+    def __init__(self, pulls):
+        self.pulls, self.closed = list(pulls), False
+
+    def open_stream(self, timeout):
+        pass
+
+    def pull_chunk(self, timeout, max_samples=1024):
+        pull = self.pulls.pop(0) if self.pulls else ([], [])
+        if isinstance(pull, BaseException):
+            raise pull
+        return pull
+
+    def close_stream(self):
+        self.closed = True
+
+
+def test_ctrl_c_saves_the_held_samples_with_the_cues_that_already_arrived():
+    """Ctrl+C while the cue merger still holds every sample: they are saved, and a cue that
+    arrived after the last pull still lands on its sample."""
+    fs = MODEL.fs
+    eeg = Pulls([([[float(i)] * 8 for i in range(10)], [100 + i / fs for i in range(10)]), KeyboardInterrupt()])
+    cue = Pulls([([], []), ([[231]], [100 + 4 / fs])])
+    messages = []
+    rec = record(LiveSource(eeg, eeg_indices=list(range(8)), cue_inlet=cue, cue_lag=1.0, fs=fs, timeout=0.01,
+                            pylsl_module=pylsl, report=messages.append))
+    assert messages == ["stopped early; saving what was recorded"]
+    np.testing.assert_array_equal(rec.signal[:, 0], np.arange(10.0))
+    assert [i for i, s in enumerate(rec.stim) if s] == [4] and rec.stim[4] == 231
+    assert eeg.closed and cue.closed
 
 
 def test_outside_repo_is_not_fooled_by_letter_case(tmp_path):

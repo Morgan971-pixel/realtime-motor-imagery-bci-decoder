@@ -1,25 +1,14 @@
 """Consume an LSL EEG stream (optionally with a separate cue-marker stream) and publish decoder decisions."""
 import argparse
-import importlib
 import json
 import math
 import sys
 import time
 
-import numpy as np
-
-from .cue_merge import CueMerger
+from .cores import CORES, make_decoder
+from .lsl_source import LiveSource, _pylsl
 from .model import Model
 from .recording import EEG_CHANNELS
-from .streaming import StreamingDecoder
-
-
-def _pylsl():
-    try:
-        import pylsl
-    except ImportError as exc:
-        raise RuntimeError("LSL support is optional; install with .venv/bin/pip install -e 'python[live]'") from exc
-    return pylsl
 
 
 MARKER_LABELS = ("stim", "markers")
@@ -124,19 +113,6 @@ def channel_layout(info, channels=None):
     return eeg, stim
 
 
-def make_decoder(core, model: Model, model_json: str):
-    if core == "python":
-        return StreamingDecoder(model)
-    module_name = {"rust": "mi_core", "cpp": "mi_core_cpp"}.get(core)
-    if module_name is None:
-        raise ValueError(f"unknown core {core!r}; choose python, rust, or cpp")
-    try:
-        module = importlib.import_module(module_name)
-    except ImportError as exc:
-        raise RuntimeError(f"core {core!r} requires {module_name}; build its Python binding first") from exc
-    return module.Decoder(model_json)
-
-
 def format_decision(decision, channels=EEG_CHANNELS):
     pinned = [channels[index] for index in decision["pinned"]]
     return {
@@ -162,111 +138,21 @@ def publish_decision(outlet, decision, timestamp=None, pylsl_module=None):
     outlet.push_sample([payload], timestamp=timestamp)
 
 
-def _validated(sample, eeg_indices, stim_index, index):
-    values = np.asarray(sample, dtype=np.float64)
-    if eeg_indices is None:
-        if values.shape != (8,):
-            raise ValueError(f"expected 8 EEG values, got {values.shape}")
-        eeg = values
-    else:
-        eeg = values[eeg_indices]
-    stim = 0.0 if stim_index is None else float(values[stim_index])
-    if eeg.shape != (8,) or not np.all(np.isfinite(eeg)) or not math.isfinite(stim):
-        raise ValueError(f"invalid LSL sample at accepted index {index}")
-    return eeg, stim
-
-
-def _drain(cue_inlet, merger, timeout):
-    """Hand every waiting cue to the merger; the first pull may wait up to timeout."""
-    while True:
-        chunk, stamps = cue_inlet.pull_chunk(timeout=timeout)
-        if not chunk:
-            return
-        for sample, stamp in zip(chunk, stamps):
-            merger.add_cue(sample[0], stamp)
-        timeout = 0.0
-
-
-def samples(inlet, *, eeg_indices=None, stim_index=None, cue_inlet=None, merger=None, timeout=0.25,
-            max_samples=None, lost=(), report=None):
-    """(eeg, stim, timestamp) for every accepted sample, in stream order. With a cue inlet the
-    samples come out of the merger after its lag, cues are collected after every EEG chunk, and
-    everything still held is released when the stream ends, is lost or reaches max_samples.
-    Losing the cue stream (say the cue program finished) is reported and decoding goes on
-    without new cues; losing the EEG stream ends the samples."""
-    pulled = 0
-    cues_alive = cue_inlet is not None
-
-    def drain(timeout_s):
-        nonlocal cues_alive
-        if not cues_alive:
-            return
-        try:
-            _drain(cue_inlet, merger, timeout_s)
-        except lost as err:
-            cues_alive = False
-            if report is not None:
-                report(f"LSL cue stream lost: {err}; decoding continues without new cues")
-
-    try:
-        while max_samples is None or pulled < max_samples:
-            want = 1024 if max_samples is None else min(1024, max_samples - pulled)
-            chunk, stamps = inlet.pull_chunk(timeout=timeout, max_samples=want)
-            for sample, stamp in zip(chunk, stamps):
-                eeg, stim = _validated(sample, eeg_indices, stim_index, pulled)
-                pulled += 1
-                if merger is None:
-                    yield eeg, stim, stamp
-                else:
-                    merger.add_eeg(eeg, stamp)
-            if merger is not None:
-                drain(0.0)
-                yield from merger.pop_ready()
-    except lost as err:
-        if report is not None:
-            report(f"LSL EEG stream lost: {err}")
-    if merger is not None:
-        drain(timeout)  # markers sent together with the last samples
-        yield from merger.flush()
-
-
-def run(inlet, decoder, marker_outlet=None, printer=print, *, eeg_indices=None, stim_index=None,
-        timeout=0.25, max_samples=None, pylsl_module=None, cue_inlet=None, cue_lag=0.5, fs=None, report=None):
-    """Decode an LSL EEG stream. With cue_inlet, cue markers from that second stream become the
-    stim values of the EEG samples they belong to (cue_merge.py). Returns the number of samples
-    given to the decoder. Timestamps are expected on the local LSL clock (open_streams turns on
-    clock synchronisation), so decision markers reuse them as they are."""
-    pylsl_module = pylsl_module or _pylsl()
-    report = report or (lambda message: print(message, file=sys.stderr, flush=True))
-    merger = None
-    if cue_inlet is not None:
-        if stim_index is not None:
-            raise ValueError("the EEG stream has its own stim channel; use it or a cue stream, not both")
-        if fs is None:
-            raise ValueError("fs is required to merge a cue stream")
-        merger = CueMerger(fs, cue_lag, report)
-    lost = getattr(getattr(pylsl_module, "util", None), "LostError", None)
+def run(source, decoder, marker_outlet=None, printer=print):
+    """Decode every sample of source (an lsl_source.LiveSource): print each decision and, with a
+    marker outlet, publish it. Returns the number of samples given to the decoder. Timestamps
+    are on the local LSL clock (open_streams turns on clock synchronisation), so decision
+    markers reuse them as they are."""
     count = 0
-    try:
-        inlet.open_stream(timeout=timeout)
-        if cue_inlet is not None:
-            cue_inlet.open_stream(timeout=timeout)
-        for eeg, stim, timestamp in samples(inlet, eeg_indices=eeg_indices, stim_index=stim_index,
-                                            cue_inlet=cue_inlet, merger=merger, timeout=timeout,
-                                            max_samples=max_samples, lost=(lost,) if lost else (), report=report):
+    with source:
+        for eeg, stim, timestamp in source:
             decision = decoder.push(eeg, stim)
             count += 1
             if decision is not None:
                 normalized = format_decision(decision)
                 printer(terminal_line(normalized))
                 if marker_outlet is not None:
-                    publish_decision(marker_outlet, normalized, timestamp, pylsl_module)
-    finally:
-        inlet.close_stream()
-        if cue_inlet is not None:
-            cue_inlet.close_stream()
-    if merger is not None and merger.summary():
-        report(merger.summary())
+                    publish_decision(marker_outlet, normalized, timestamp, source.pylsl)
     return count
 
 
@@ -307,7 +193,7 @@ def open_streams(pylsl, fs, stream_name, stream_type="EEG", channels=None, cue_s
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("model")
-    parser.add_argument("--core", choices=("python", "rust", "cpp"), default="python")
+    parser.add_argument("--core", choices=CORES, default="python")
     parser.add_argument("--stream-name", default="Unicorn")
     parser.add_argument("--stream-type", default="EEG")
     parser.add_argument("--channels", help="pick the 8 EEG channels: indices in model order (e.g. 0-7) "
@@ -329,13 +215,14 @@ def main(argv=None):
         channels = parse_channels(args.channels) if args.channels else None
         inlet, eeg_indices, stim_index, cue_inlet = open_streams(
             pylsl, model.fs, args.stream_name, args.stream_type, channels, args.cue_stream, args.timeout)
-        decoder = make_decoder(args.core, model, model_json)
+        source = LiveSource(inlet, eeg_indices=eeg_indices, stim_index=stim_index, cue_inlet=cue_inlet,
+                            cue_lag=args.cue_lag, fs=model.fs, pylsl_module=pylsl)
+        decoder = make_decoder(args.core, model_json)
         marker_outlet = None
         if not args.no_marker_outlet:
             marker_info = pylsl.StreamInfo(args.marker_name, "Markers", 1, 0, pylsl.cf_string, args.marker_source_id)
             marker_outlet = pylsl.StreamOutlet(marker_info)
-        run(inlet, decoder, marker_outlet, eeg_indices=eeg_indices, stim_index=stim_index, pylsl_module=pylsl,
-            cue_inlet=cue_inlet, cue_lag=args.cue_lag, fs=model.fs)
+        run(source, decoder, marker_outlet)
     except (OSError, ValueError, RuntimeError, TimeoutError) as exc:
         print(str(exc), file=sys.stderr)
         return 1

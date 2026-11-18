@@ -10,53 +10,33 @@ import sys
 
 import numpy as np
 
-from .cue_merge import CueMerger
 from .events import validate_stim
-from .lsl_live import _drain, _pylsl, open_streams, parse_channels, samples
+from .lsl_live import open_streams, parse_channels
+from .lsl_source import LiveSource, _pylsl
 from .paths import outside_repo
 from .recording import Recording, save_recording
 
 
-def record(inlet, *, fs, eeg_indices=None, stim_index=None, cue_inlet=None, cue_lag=0.5, max_samples=None,
-           timeout=0.25, pylsl_module=None, report=None) -> Recording:
-    """Collect samples until max_samples, a lost stream or Ctrl+C; returns them as a Recording."""
-    pylsl_module = pylsl_module or _pylsl()
-    report = report or (lambda message: print(message, file=sys.stderr, flush=True))
-    if cue_inlet is not None and stim_index is not None:
-        raise ValueError("the EEG stream has its own stim channel; use it or a cue stream, not both")
-    merger = CueMerger(fs, cue_lag, report) if cue_inlet is not None else None
-    lost = getattr(getattr(pylsl_module, "util", None), "LostError", None)
-    lost_errors = (lost,) if lost else ()
+def record(source) -> Recording:
+    """Collect the samples of source (an lsl_source.LiveSource) until it ends, it is lost or
+    Ctrl+C; returns them as a Recording. After Ctrl+C, the samples the cue merger still holds
+    are saved too, with every cue that has already arrived."""
     rows, stims, stamps = [], [], []
-    inlet.open_stream(timeout=timeout)
-    if cue_inlet is not None:
-        cue_inlet.open_stream(timeout=timeout)
-    try:
-        for eeg, stim, stamp in samples(inlet, eeg_indices=eeg_indices, stim_index=stim_index, cue_inlet=cue_inlet,
-                                        merger=merger, timeout=timeout, max_samples=max_samples,
-                                        lost=lost_errors, report=report):
+
+    def keep(samples):
+        for eeg, stim, stamp in samples:
             rows.append(eeg)
             stims.append(stim)
             stamps.append(stamp)
-    except KeyboardInterrupt:
-        report("stopped early; saving what was recorded")
-        if merger is not None:
-            try:
-                _drain(cue_inlet, merger, 0.0)  # cues already waiting for the held samples
-            except lost_errors as err:
-                report(f"LSL cue stream lost: {err}")
-            for eeg, stim, stamp in merger.flush():
-                rows.append(eeg)
-                stims.append(stim)
-                stamps.append(stamp)
-    finally:
-        inlet.close_stream()
-        if cue_inlet is not None:
-            cue_inlet.close_stream()
+
+    with source:
+        try:
+            keep(source)
+        except KeyboardInterrupt:
+            source.report("stopped early; saving what was recorded")
+            keep(source.release_held())
     if not rows:
         raise ValueError("no samples were recorded")
-    if merger is not None and merger.summary():
-        report(merger.summary())
     return Recording(np.array(stamps), np.vstack(rows), validate_stim(np.array(stims, dtype=np.float64)))
 
 
@@ -92,8 +72,8 @@ def main(argv=None) -> int:
         inlet, eeg_indices, stim_index, cue_inlet = open_streams(
             pylsl, a.fs, a.stream_name, a.stream_type, channels, a.cue_stream, a.timeout)
         print(f"recording {a.seconds:g} s; Ctrl+C stops early and still saves", file=sys.stderr)
-        rec = record(inlet, fs=a.fs, eeg_indices=eeg_indices, stim_index=stim_index, cue_inlet=cue_inlet,
-                     cue_lag=a.cue_lag, max_samples=round(a.seconds * a.fs), pylsl_module=pylsl)
+        rec = record(LiveSource(inlet, eeg_indices=eeg_indices, stim_index=stim_index, cue_inlet=cue_inlet,
+                                cue_lag=a.cue_lag, fs=a.fs, max_samples=round(a.seconds * a.fs), pylsl_module=pylsl))
         out.parent.mkdir(parents=True, exist_ok=True)
         write_new(out, rec)
     except KeyboardInterrupt:

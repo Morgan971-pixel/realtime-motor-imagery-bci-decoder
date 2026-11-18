@@ -3,6 +3,7 @@ import json
 import numpy as np
 import pytest
 
+from helpers import assert_same_decisions
 from mi_ref.golden import CASES, GOLDEN_DIR
 from mi_ref.model import Model, decode_recording
 from mi_ref.recording import Recording, load_recording
@@ -20,19 +21,11 @@ def _stream(model, rec):
     return [d for s, c in zip(rec.signal, rec.stim) if (d := dec.push(s, c)) is not None]
 
 
-def _assert_same(got, expected):
-    keys = ("sample", "trial", "true_label", "label", "pinned")
-    assert [tuple(d[k] for k in keys) for d in got] == [tuple(e[k] for k in keys) for e in expected]
-    for d, e in zip(got, expected):
-        np.testing.assert_allclose(d["features"], e["features"], rtol=1e-9)
-        assert abs(d["score"] - e["score"]) < 1e-7
-
-
 @pytest.mark.parametrize("name", CASES)
 def test_streaming_matches_committed_golden_decisions(name):
     model = Model.from_json((GOLDEN_DIR / CASES[name]).read_text())
     expected = json.loads((GOLDEN_DIR / "expected.json").read_text())[name]["decisions"]
-    _assert_same(_stream(model, load_recording(GOLDEN_DIR / f"{name}.csv")), expected)
+    assert_same_decisions(_stream(model, load_recording(GOLDEN_DIR / f"{name}.csv")), expected)
 
 
 @pytest.mark.parametrize("seed", range(5))
@@ -45,7 +38,7 @@ def test_streaming_matches_batch_on_random_marker_patterns(model, seed):
         code = int(rng.choice([131, 132, 121, 151, 111, 141, 232, 331]))
         stim[i : i + int(rng.integers(1, 4))] = code  # runs of 1-3 samples
     rec = Recording(base.timestamps, base.signal, stim)
-    _assert_same(_stream(model, rec), decode_recording(model, rec))
+    assert_same_decisions(_stream(model, rec), decode_recording(model, rec))
 
 
 @pytest.mark.parametrize("code", [-1, 99, 313.5, 2**31, float("nan")])
