@@ -5,7 +5,7 @@
 Decodes imagined left versus right hand movement from 8-channel EEG as the samples arrive. The electrode layout is that of the g.tec Unicorn headset used by the Brain-Computer Interface Society at Johns Hopkins (BCIS). The same decoder is written three times against one written contract ([docs/model-format.md](docs/model-format.md)): a Python reference and two native cores, Rust and C++, which make bit-identical decisions.
 
 - **Fast:** about 18 µs per decision (median) in Rust and C++, about 190 µs in Python ([Benchmarks](#benchmarks)).
-- **Checked:** 825 Python, 59 Rust and 57 C++ tests. CI runs AddressSanitizer, UndefinedBehaviorSanitizer, fuzzing and Miri, and requires every core to match the reference on synthetic and real public EEG ([docs/ci.md](docs/ci.md)).
+- **Checked:** 828 Python, 60 Rust and 58 C++ tests. CI runs AddressSanitizer, UndefinedBehaviorSanitizer, fuzzing and Miri, and requires every core to match the reference on synthetic and real public EEG ([docs/ci.md](docs/ci.md)). Twelve Hypothesis property tests compare the three cores on generated models and streams; they found one real cross-core bug, now fixed ([docs/rust-vs-cpp.md](docs/rust-vs-cpp.md)).
 - **Live:** reads EEG over Lab Streaming Layer (LSL), merges cues from its own cue program, and publishes each decision as an LSL marker. A recorder and a train command turn a short cued session into a personal model ([docs/lsl-live.md](docs/lsl-live.md)).
 - **Honest:** accuracy comes only from cross-validation that holds out whole blocks of trials in time, next to the 95% chance threshold.
 

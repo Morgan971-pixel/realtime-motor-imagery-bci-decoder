@@ -103,7 +103,7 @@ jobs:
             sleep 15
           done
           cd python
-          REQUIRE_CORES=mi_core,mi_core_cpp REQUIRE_PUBLIC_DATA=1 REQUIRE_LSL=1 pytest -q
+          HYPOTHESIS_PROFILE=ci REQUIRE_CORES=mi_core,mi_core_cpp REQUIRE_PUBLIC_DATA=1 REQUIRE_LSL=1 pytest -q
 
       # Stable steps are done: installing nightly below also makes it rustup's default.
       - uses: dtolnay/rust-toolchain@master
@@ -204,4 +204,4 @@ jobs:
           (cd rust/mi_core && maturin develop --release)
           pip install ./cpp
           cd python
-          REQUIRE_CORES=mi_core,mi_core_cpp pytest -q
+          HYPOTHESIS_PROFILE=ci REQUIRE_CORES=mi_core,mi_core_cpp pytest -q

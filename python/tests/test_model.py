@@ -2,9 +2,14 @@ import json
 
 import numpy as np
 import pytest
+from hypothesis import given
+from hypothesis import strategies as st
 
+from helpers import native_or_none, outcome
+from mi_ref.cores import NATIVE
 from mi_ref.model import Model, decode_recording, train
 from mi_ref.synth import make_recording
+from strategies import models, streams
 
 
 @pytest.fixture(scope="module")
@@ -94,3 +99,51 @@ def test_repeated_keys_are_rejected(model):
     text = model.to_json().replace('"fs": ', '"fs": 250.0, "fs": ', 1)
     with pytest.raises(ValueError, match="repeats a key"):
         Model.from_json(text)
+
+
+@given(model=st.booleans().flatmap(lambda realistic: models(realistic=realistic)))
+def test_json_text_roundtrip_is_exact_on_generated_models(model):
+    """Any valid model, extreme values included (weights up to 1e100, rail_abs up to 1e300, raw
+    filter sections): writing, reading and writing again gives the same JSON text."""
+    text = model.to_json()
+    assert Model.from_json(text).to_json() == text
+
+
+# Ways to write the same double differently: every one parses back to exactly the same value
+# (17 significant digits are always enough), so a correct loader cannot tell them apart.
+SPELLINGS = (
+    lambda x: format(x, ".17e"),  # 5.00000000000000000e-01
+    lambda x: format(x, ".17g"),  # 0.50000000000000000
+    lambda x: format(x, ".17E"),  # upper-case exponent
+    lambda x: repr(x),  # shortest round trip, as json.dumps writes it
+)
+
+
+def _respelled(value, choose):
+    """JSON text for value, every float written by a spelling choose() picks (ints and the rest
+    are left as JSON writes them, so schema_version and labels stay integers)."""
+    if isinstance(value, float):
+        return choose()(value)
+    if isinstance(value, dict):
+        return "{" + ", ".join(f"{json.dumps(k)}: {_respelled(v, choose)}" for k, v in value.items()) + "}"
+    if isinstance(value, list):
+        return "[" + ", ".join(_respelled(v, choose) for v in value) + "]"
+    return json.dumps(value)
+
+
+@pytest.mark.parametrize("core", tuple(NATIVE))
+@given(data=st.data())
+def test_native_core_reads_any_spelling_of_the_same_numbers(core, data):
+    """The model JSON with every number written differently (exponent forms, 17 significant
+    digits, upper-case E) loads as the same model in Python and makes a native core decide the
+    same, bit for bit. A loader that does not round every number correctly (the serde_json
+    float_roundtrip bug of Phase 2) fails this."""
+    module = native_or_none(core)
+    if module is None:
+        pytest.skip(f"{NATIVE[core]} is not built")
+    model = data.draw(models(realistic=False), label="model")
+    signal, stim = data.draw(streams(model, realistic=False), label="stream")
+    text = model.to_json()
+    respelled = _respelled(json.loads(text), lambda: data.draw(st.sampled_from(SPELLINGS)))
+    assert Model.from_json(respelled).to_json() == text
+    assert outcome(module.Decoder(respelled), signal, stim) == outcome(module.Decoder(text), signal, stim)

@@ -10,7 +10,7 @@ Every implementation (Python reference, Rust, C++) must follow these steps exact
 
 ## Numeric rules
 
-All arithmetic is IEEE-754 binary64 (`f64` / `double`). No float32, no fast-math, and no fused multiply-add contraction (C++: `-ffp-contract=off`). Variance is two-pass: compute the mean first, then the sum of squared deviations. Parse every number in `model.json` and in the CSV to the correctly rounded double (Rust's `serde_json` needs its `float_roundtrip` feature for this; its default fast path can be one unit in the last place off). With these rules the Rust and C++ cores produce bit-identical decisions.
+All arithmetic is IEEE-754 binary64 (`f64` / `double`). No float32, no fast-math, and no fused multiply-add contraction (C++: `-ffp-contract=off`). Variance is two-pass: compute the mean first, then the sum of squared deviations. Parse every number in `model.json` and in the CSV to the correctly rounded double (Rust's `serde_json` needs its `float_roundtrip` feature for this; its default fast path can be one unit in the last place off). With these rules the Rust and C++ cores produce bit-identical decisions. A number written as the integer `-0` is negative zero, the same double as `-0.0`.
 
 ## model.json fields
 

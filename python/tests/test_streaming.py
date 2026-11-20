@@ -2,13 +2,15 @@ import json
 
 import numpy as np
 import pytest
+from hypothesis import event, given
+from hypothesis import strategies as st
 
-from helpers import assert_same_decisions
+from helpers import assert_close_decisions, assert_same_decisions
 from mi_ref.golden import CASES, GOLDEN_DIR
 from mi_ref.model import Model, decode_recording
 from mi_ref.recording import Recording, load_recording
 from mi_ref.streaming import StreamingDecoder
-from mi_ref.synth import make_recording
+from strategies import models, streams
 
 
 @pytest.fixture(scope="module")
@@ -28,17 +30,16 @@ def test_streaming_matches_committed_golden_decisions(name):
     assert_same_decisions(_stream(model, load_recording(GOLDEN_DIR / f"{name}.csv")), expected)
 
 
-@pytest.mark.parametrize("seed", range(5))
-def test_streaming_matches_batch_on_random_marker_patterns(model, seed):
-    """Random codes, runs, A,B,A patterns and overlapping windows: streaming == batch."""
-    rng = np.random.default_rng(seed)
-    base = make_recording(n_trials=1, seed=100 + seed)
-    stim = np.zeros(len(base.stim), dtype=np.int64)
-    for i in rng.choice(len(stim) - 3, size=25, replace=False):
-        code = int(rng.choice([131, 132, 121, 151, 111, 141, 232, 331]))
-        stim[i : i + int(rng.integers(1, 4))] = code  # runs of 1-3 samples
-    rec = Recording(base.timestamps, base.signal, stim)
-    assert_same_decisions(_stream(model, rec), decode_recording(model, rec))
+@given(st.data())
+def test_streaming_matches_batch_on_generated_models_and_streams(data):
+    """Any realistic model and stream (extra cues of any code, overlapping windows): streaming
+    decisions agree with batch decisions within floating-point noise."""
+    model = data.draw(models(realistic=True), label="model")
+    signal, stim = data.draw(streams(model, realistic=True), label="stream")
+    rec = Recording(np.arange(len(stim)) / model.fs, signal, stim)
+    expected = decode_recording(model, rec)
+    event("decisions: " + ("0", "1", "2+")[min(len(expected), 2)])  # coverage, see --hypothesis-show-statistics
+    assert_close_decisions(_stream(model, rec), expected)
 
 
 @pytest.mark.parametrize("code", [-1, 99, 313.5, 2**31, float("nan")])

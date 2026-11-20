@@ -298,4 +298,17 @@ mod tests {
             .all(|b| b.csp.len() == 4 && b.sos.len() == 4));
         assert_eq!(m.lda_w().len(), 16);
     }
+
+    /// The integer spelling -0 is negative zero, the correctly rounded double of its text (C++ and
+    /// Python once read it as +0; found by the Hypothesis property on re-spelled numbers).
+    #[test]
+    fn negative_zero_written_as_an_integer_keeps_its_sign() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../golden/model.json");
+        let text = std::fs::read_to_string(path).unwrap();
+        let text = text.replace("\"b\": -19.391831086424165", "\"b\": -0");
+        assert!(text.contains("\"b\": -0\n"));
+        let m = Model::from_json(&text).unwrap();
+        assert_eq!(m.lda_b(), 0.0);
+        assert!(m.lda_b().is_sign_negative());
+    }
 }

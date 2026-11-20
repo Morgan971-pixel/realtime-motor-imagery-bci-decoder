@@ -19,7 +19,11 @@ class StrictSax : public nlohmann::json_sax<json> {
 
   bool null() override { return put(nullptr); }
   bool boolean(bool v) override { return put(v); }
-  bool number_integer(number_integer_t v) override { return put(v); }
+  // nlohmann reports a non-negative integer through number_unsigned, so number_integer only ever
+  // sees 0 for the text -0. An int64 has no negative zero: keep the sign as the contract's
+  // correctly rounded double (-0.0), as Rust and Python read it. This relies on the lexer of the
+  // pinned nlohmann v3.11.3 (cpp/CMakeLists.txt); recheck it when that version changes.
+  bool number_integer(number_integer_t v) override { return v == 0 ? put(-0.0) : put(v); }
   bool number_unsigned(number_unsigned_t v) override { return put(v); }
   bool number_float(number_float_t v, const string_t&) override { return put(v); }
   bool string(string_t& v) override { return put(v); }

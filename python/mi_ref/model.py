@@ -31,6 +31,12 @@ def _no_duplicates(pairs: list) -> dict:
     return dict(pairs)
 
 
+def _parse_int(text: str):
+    """JSON integers stay Python ints, except -0: an int has no negative zero, and the contract reads
+    every number as its correctly rounded double, which for -0 is -0.0 (as Rust and C++ do)."""
+    return -0.0 if text == "-0" else int(text)
+
+
 def _num(v, where: str) -> float:
     """A JSON number (int or float, never a bool or a string)."""
     if isinstance(v, bool) or not isinstance(v, (int, float)):
@@ -145,7 +151,7 @@ class Model:
 
     @classmethod
     def from_json(cls, text: str) -> "Model":
-        d = _keys(json.loads(text, parse_constant=_no_constants, object_pairs_hook=_no_duplicates), _TOP_KEYS, "model", _OPTIONAL_KEYS)
+        d = _keys(json.loads(text, parse_int=_parse_int, parse_constant=_no_constants, object_pairs_hook=_no_duplicates), _TOP_KEYS, "model", _OPTIONAL_KEYS)
         if type(d["schema_version"]) is not int or d["schema_version"] != SCHEMA_VERSION:
             raise ValueError(f"unsupported schema_version {d['schema_version']!r}")
         if d["offset"] != OFFSET_RULE:

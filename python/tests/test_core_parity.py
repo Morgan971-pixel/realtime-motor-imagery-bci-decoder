@@ -4,18 +4,22 @@ A core that is not built is skipped, so the Python suite runs on its own. Set
 REQUIRE_CORES=mi_core,mi_core_cpp (for example in CI) to make a missing build an error.
 """
 import json
+import math
 import re
 
 import numpy as np
 import pytest
+from hypothesis import event, given
+from hypothesis import strategies as st
 
-from helpers import assert_same_decisions, native_or_none
-from mi_ref.cores import NATIVE
+from helpers import assert_close_decisions, assert_same_decisions, exact_bits, native_or_none, outcome
+from mi_ref.cores import NATIVE, make_decoder
 from mi_ref.golden import CASES, GOLDEN_DIR
 from mi_ref.invalid import INVALID_DIR, expand_rows, to_float
 from mi_ref.model import Model, decode_recording
-from mi_ref.recording import Recording, load_recording, save_recording
-from mi_ref.synth import make_recording
+from mi_ref.recording import Recording, load_recording
+from mi_ref.streaming import StreamingDecoder
+from strategies import models, streams
 
 MODEL_TEXT = (GOLDEN_DIR / "model.json").read_text()
 MANIFEST = json.loads((INVALID_DIR / "manifest.json").read_text())
@@ -36,19 +40,6 @@ def test_streaming_binding_refuses_pinned_windows(native_core):
     ]
     assert [d["label"] == 0 for d in got] == [bool(d["pinned"]) for d in got]
     assert_same_decisions(got, native_core.decode_file(str(GOLDEN_DIR / "rail_model.json"), str(GOLDEN_DIR / "rail_stream.csv")))
-
-
-@pytest.mark.parametrize("seed", range(3))
-def test_core_equals_python_on_random_marker_patterns(native_core, tmp_path, seed):
-    rng = np.random.default_rng(seed)
-    base = make_recording(n_trials=2, seed=200 + seed)
-    stim = np.zeros(len(base.stim), dtype=np.int64)
-    for i in rng.choice(len(stim) - 3, size=30, replace=False):
-        stim[i : i + int(rng.integers(1, 4))] = int(rng.choice([131, 132, 121, 151, 111, 141, 232, 331]))
-    path = tmp_path / "rec.csv"
-    save_recording(path, Recording(base.timestamps, base.signal, stim))
-    on_disk = load_recording(path)  # every core reads the same rounded CSV values
-    assert_same_decisions(native_core.decode_file(str(GOLDEN_DIR / "model.json"), str(path)), decode_recording(Model.from_json(MODEL_TEXT), on_disk))
 
 
 def test_streaming_binding_matches_batch(native_core):
@@ -201,3 +192,147 @@ def test_native_cores_agree_with_each_other_bit_for_bit():
         args = (str(GOLDEN_DIR / model_file), str(GOLDEN_DIR / f"{name}.csv"))
         rust, cpp = (c.decode_file(*args) for c in cores)
         assert rust == cpp, name
+
+
+def _decisions(decoder, signal, stim):
+    """Every decision a decoder makes on the stream, in order."""
+    return [d for sample, code in zip(signal, stim) if (d := decoder.push(sample, float(code))) is not None]
+
+
+def _tag(decisions):
+    """Coverage labels (shown with --hypothesis-show-statistics), so a generator change that stops
+    producing refusals or non-finite scores shows up instead of passing quietly."""
+    if not decisions:
+        event("decisions: none")
+        return
+    event("decisions: all refused (pinned)" if all(d["pinned"] for d in decisions) else "decisions: some unpinned")
+    event("score: some non-finite" if any(not math.isfinite(d["score"]) for d in decisions) else "score: all finite")
+
+
+def _both_native():
+    cores = [native_or_none(core) for core in NATIVE]
+    if None in cores:
+        pytest.skip("needs both native cores built")
+    return cores
+
+
+@given(st.data())
+def test_rust_and_cpp_decide_bit_identically_on_generated_models_and_streams(data):
+    """Any valid model, any values (extremes included): Rust and C++ make the same decisions, bit for bit."""
+    rust, cpp = _both_native()
+    model = data.draw(models(realistic=False), label="model")
+    signal, stim = data.draw(streams(model, realistic=False), label="stream")
+    text = model.to_json()
+    _tag(_decisions(rust.Decoder(text), signal, stim))
+    assert outcome(rust.Decoder(text), signal, stim) == outcome(cpp.Decoder(text), signal, stim)
+
+
+def _decisions_rejecting(decoder, signal, stim, bad):
+    """Every decision a decoder makes on the stream; each row whose index is in bad must raise
+    ValueError (and is then skipped), every other row must be accepted."""
+    decisions = []
+    for i, (sample, code) in enumerate(zip(signal, stim)):
+        if i in bad:
+            with pytest.raises(ValueError):
+                decoder.push(sample, float(code))
+        elif (d := decoder.push(sample, float(code))) is not None:
+            decisions.append(d)
+    return decisions
+
+
+def _without(signal, stim, bad):
+    keep = np.setdiff1d(np.arange(len(stim)), bad)
+    return signal[keep], stim[keep]
+
+
+@given(st.data())
+def test_rejected_rows_leave_every_decoder_as_if_they_never_arrived(data):
+    """Bad rows (invalid stim, non-finite EEG) inside realistic streams: each one raises, and every
+    core then decides exactly as it does on the same stream with those rows deleted. Python and the
+    native cores agree within tolerance; Rust and C++ bit for bit."""
+    cores = ["python"] + [core for core in NATIVE if native_or_none(core) is not None]
+    model = data.draw(models(realistic=True), label="model")
+    signal, stim, bad = data.draw(streams(model, bad_rows=True), label="stream")
+    clean = _without(signal, stim, bad)
+    text = model.to_json()
+    got = {}
+    for core in cores:
+        got[core] = _decisions_rejecting(make_decoder(core, text), signal, stim, bad)
+        assert exact_bits(got[core]) == exact_bits(_decisions_rejecting(make_decoder(core, text), *clean, ())), core
+    for core in NATIVE.keys() & got.keys():
+        assert_close_decisions(got[core], got["python"])
+    if NATIVE.keys() <= got.keys():
+        assert exact_bits(got["rust"]) == exact_bits(got["cpp"])
+
+
+@given(st.data())
+def test_rust_and_cpp_reject_the_same_rows_and_agree_bit_for_bit_on_extreme_streams(data):
+    """Any valid model, extreme values, bad rows inserted: both native cores reject every bad row,
+    decide as on the stream without them, and agree with each other bit for bit."""
+    rust, cpp = _both_native()
+    model = data.draw(models(realistic=False), label="model")
+    signal, stim, bad = data.draw(streams(model, realistic=False, bad_rows=True), label="stream")
+    text = model.to_json()
+    got = [exact_bits(_decisions_rejecting(core.Decoder(text), signal, stim, bad)) for core in (rust, cpp)]
+    assert got[0] == exact_bits(_decisions_rejecting(rust.Decoder(text), *_without(signal, stim, bad), ()))
+    assert got[0] == got[1]
+
+
+def _built_natives():
+    """The native cores that are built (an error for a missing one named in REQUIRE_CORES)."""
+    cores = [module for module in map(native_or_none, NATIVE) if module is not None]
+    if not cores:
+        pytest.skip("no native core is built")
+    return cores
+
+
+@given(st.data())
+def test_python_matches_each_native_core_on_generated_models_and_streams(data):
+    """Any realistic model and stream: every native core decides as the Python reference does,
+    within floating-point noise."""
+    natives = _built_natives()
+    model = data.draw(models(), label="model")
+    signal, stim = data.draw(streams(model), label="stream")
+    text = model.to_json()
+    expected = _decisions(StreamingDecoder(Model.from_json(text)), signal, stim)
+    _tag(expected)
+    for core in natives:
+        assert_close_decisions(_decisions(core.Decoder(text), signal, stim), expected)
+
+
+@given(st.data())
+def test_golden_model_on_generated_streams_matches_python_and_across_cores(data):
+    """The committed golden model on any realistic stream: every native core decides as the
+    Python reference does, and Rust and C++ agree bit for bit."""
+    natives = _built_natives()
+    signal, stim = data.draw(streams(Model.from_json(MODEL_TEXT)), label="stream")
+    expected = _decisions(StreamingDecoder(Model.from_json(MODEL_TEXT)), signal, stim)
+    for core in natives:
+        assert_close_decisions(_decisions(core.Decoder(MODEL_TEXT), signal, stim), expected)
+    if len(natives) == 2:
+        rust, cpp = natives
+        assert outcome(rust.Decoder(MODEL_TEXT), signal, stim) == outcome(cpp.Decoder(MODEL_TEXT), signal, stim)
+
+
+# Found by test_native_core_reads_any_spelling_of_the_same_numbers (test_model.py): a model whose
+# bias is written as the JSON integer -0 made Rust and C++ disagree in the sign of a zero score,
+# because C++ (and Python) read -0 as +0. The contract reads -0 as -0.0 in every core.
+NEGATIVE_ZERO_MODEL = {
+    "schema_version": 1, "fs": 50.0, "channels": ["Fz", "C3", "Cz", "C4", "Pz", "PO7", "Oz", "PO8"],
+    "offset": "first_sample", "window": {"start_s": 0.0, "len_s": 0.04},
+    "bands": [{"low_hz": 5.0, "high_hz": 10.0,
+               "sos": [[1.0, 0.0, 0.0, 1.0, 0.0, 0.0]],
+               "csp": [[1.0, 0, 0, 0, 0, 0, 0, 0], [0, 1.0, 0, 0, 0, 0, 0, 0]]}],
+    "lda": {"w": [0.0, 0.0], "b": "B"}, "labels": {"score_le_0": 1, "score_gt_0": 2},
+}
+
+
+def test_negative_zero_written_as_an_integer_reads_the_same_in_every_core():
+    text = json.dumps(NEGATIVE_ZERO_MODEL).replace('"B"', "-0")
+    assert np.signbit(Model.from_json(text).lda_b)
+    signal, stim = np.zeros((2, 8)), [131, 0]  # a flat window: every feature at the floor, score -0.0
+    rust, cpp = _both_native()
+    got = [outcome(core.Decoder(text), signal, stim) for core in (rust, cpp)]
+    assert got[0] == got[1]
+    assert got[0][0]["score"] == exact_bits(-0.0)
+

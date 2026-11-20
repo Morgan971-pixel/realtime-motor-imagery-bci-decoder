@@ -1,12 +1,14 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cmath>
 #include <filesystem>
 #include <string>
 #include <vector>
 
 #include "common.hpp"
 #include "mi_core/error.hpp"
+#include "mi_core/json_strict.hpp"
 
 TEST(Model, GoldenModelLoadsWithTheExpectedShape) {
   const mi::Model& m = test::model();
@@ -45,3 +47,15 @@ TEST(Model, EveryInvalidModelIsRejectedForItsTaggedRule) {
     }
   }
 }
+
+// Found by the Hypothesis property test_native_core_reads_any_spelling_of_the_same_numbers: the
+// integer spelling -0 lost its sign in C++ only, so Rust and C++ scores differed in the sign of 0.
+TEST(Model, NegativeZeroWrittenAsAnIntegerKeepsItsSign) {
+  const auto doc = mi::parse_strict("[-0, 0, -0.0, -1]");
+  EXPECT_TRUE(std::signbit(doc[0].get<double>()));
+  EXPECT_EQ(doc[0].get<double>(), 0.0);
+  EXPECT_FALSE(std::signbit(doc[1].get<double>()));
+  EXPECT_TRUE(std::signbit(doc[2].get<double>()));
+  EXPECT_EQ(doc[3].get<double>(), -1.0);
+}
+
